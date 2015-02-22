@@ -1,0 +1,118 @@
+---
+title: "Machine Learning Project"
+author: "Rudy Pastel"
+date: "22 février 2015"
+output: html_document
+---
+```{r,echo=FALSE}
+rm(list=ls())
+```
+
+
+## Exploratory analysis
+Let us load the training set and observe it.
+```{r}
+#Load the data
+training = read.csv(file ="pml-training.csv",header = TRUE,na.strings = c("NA",NA,""," "))
+#Number of observations and of variables
+dim(training)
+```
+
+Variables that are almost constant or contain a large proportion of missing values are removed.
+
+```{r}
+fractionOfNA = sapply(X = training,FUN = function(x){mean(is.na(x))})
+table(fractionOfNA)
+tooManyNAs = which(fractionOfNA>0)
+library(caret)
+almostZeroVariance = nearZeroVar(training,saveMetrics = TRUE)
+varToRemove = unique(c(which(almostZeroVariance$nzv),tooManyNAs))
+training = training[,-varToRemove]
+dim(training)
+```
+
+There are now no missing value in the data set.
+
+```{r}
+all(!is.na(training))
+```
+
+Which is the class dictribution accross variables.
+```{r}
+table(sapply(X = training,FUN = class))
+```
+
+Which are the factor variables
+```{r}
+which(sapply(X = training,FUN = class) == "factor")
+```
+
+The time stamp is not useful here because future events will happen at other times and the clock is not ticking fast enough to create an "effort duration" variable. The user name is not useful either because movements are intructed to the sportmen so that their personal style can not show up and be taken into account during modeling. As a result, only the objective variable will be kept.
+```{r}
+training  <-  training[,-which(sapply(X = training,FUN = class) == "factor")[c(1,2)]]
+```
+
+Among the remaining variables, the first 7 do not described the movement and are therefore removed.
+```{r}
+names(training)[1:7]
+training = training[,-c(1:7)]
+```
+
+Let us check the distribution of classes is very skewed.
+```{r}
+table(training$classe)
+```
+
+There is little skew. We can proceed to the buildiing the model.
+
+## Building the model
+
+
+I will build the classification model as a random forest. Cross validation is excluded as indicated in [here](http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr).
+
+```{r}
+fit = train(x = subset(x = training,select = -c(classe)),
+            y=training$classe,
+            method = "rf",
+            trControl = trainControl(method = "oob"))
+fit$finalModel
+```
+
+This is very low error rate. One should expect higher value on the test set.
+
+## Calculating prediction ofr the test set
+
+The test set is first loaded and formated as the training set was.
+
+```{r}
+#Load the data
+test = read.csv(file ="pml-testing.csv",header = TRUE,na.strings = c("NA",NA,""))
+# Remove variables
+test <-  test[,-c(varToRemove,which(sapply(X = test,FUN = class) == "factor")[c(1,2)])]
+test <- test[,-c(1:7)] 
+#Check for missing values
+all(!is.na(test))
+#Size of the test set
+dim(test)
+```
+
+The classification can now take place.
+
+```{r}
+answers  <- predict(fit,test)
+answers
+```
+
+The results are printed in files for later submission.
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("answers/problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers)
+```
+
